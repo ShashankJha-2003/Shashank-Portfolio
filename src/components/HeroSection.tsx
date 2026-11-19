@@ -16,10 +16,10 @@ export default function HeroSection() {
   const ctaRef = useRef<HTMLDivElement>(null);
   const statsRef = useRef<HTMLDivElement>(null);
   const techPillsRef = useRef<HTMLDivElement>(null);
-  const faceVideoRef = useRef<HTMLVideoElement>(null);
+  const faceCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const targetTimeRef = useRef<number>(0.02);
-  const currentTimeRef = useRef<number>(0.02);
+  const targetTurnRef = useRef<number>(0);
+  const currentTurnRef = useRef<number>(0);
   const velocityRef = useRef<number>(0);
   const isDraggingFaceRef = useRef<boolean>(false);
   const dragStartXRef = useRef<number>(0);
@@ -29,60 +29,72 @@ export default function HeroSection() {
 
   const resetFrontAngle = () => {
     playAudioCue('click');
-    const dur = faceVideoRef.current?.duration || 10.03;
-    const cycles = Math.round(currentTimeRef.current / dur);
     velocityRef.current = 0;
-    targetTimeRef.current = cycles * dur + 0.02;
+    targetTurnRef.current = Math.round(currentTurnRef.current);
   };
 
-  // Manual mouse-drag 360° rotation with silky bearing momentum (paused by default — rotates ONLY on drag)
+  // Zero-latency 96-angle RGBA WebP Turntable Canvas (60-120 FPS silky bearing momentum!)
   useEffect(() => {
-    const video = faceVideoRef.current;
-    if (!video) return;
+    const canvas = faceCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    video.muted = true;
-    video.pause();
+    const CELL_W = 384;
+    const CELL_H = 682;
+    const COLS = 8;
+    const PER_SHEET = 24;
+    const TOTAL = 96;
 
-    const initVideoFrame = () => {
-      video.pause();
-      video.currentTime = 0.02;
-      targetTimeRef.current = 0.02;
-      currentTimeRef.current = 0.02;
-      velocityRef.current = 0;
+    const sheets: (HTMLImageElement | null)[] = [null, null, null, null];
+    let lastDrawnFrame = -1;
+
+    const drawFrame = (frameIdx: number) => {
+      const idx = ((frameIdx % TOTAL) + TOTAL) % TOTAL;
+      const sheetIdx = Math.floor(idx / PER_SHEET);
+      const img = sheets[sheetIdx];
+      if (!img) return;
+      const localIdx = idx % PER_SHEET;
+      const col = localIdx % COLS;
+      const row = Math.floor(localIdx / COLS);
+      ctx.clearRect(0, 0, CELL_W, CELL_H);
+      ctx.drawImage(img, col * CELL_W, row * CELL_H, CELL_W, CELL_H, 0, 0, CELL_W, CELL_H);
+      lastDrawnFrame = idx;
     };
 
-    if (video.readyState >= 1) {
-      initVideoFrame();
-    } else {
-      video.addEventListener('loadedmetadata', initVideoFrame);
-      video.addEventListener('canplay', initVideoFrame, { once: true });
-    }
+    [0, 1, 2, 3].forEach((sIdx) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        sheets[sIdx] = img;
+        if (sIdx === 0 && lastDrawnFrame === -1) {
+          drawFrame(0);
+        }
+      };
+      img.src = withBasePath(`/face_turntable_${sIdx}.webp?v=7`);
+    });
 
     let animId: number;
     let lastDeg = 0;
     const updateRotation = () => {
-      if (video && video.duration) {
-        const dur = video.duration;
-        if (!isDraggingFaceRef.current && Math.abs(velocityRef.current) > 0.0004) {
-          targetTimeRef.current += velocityRef.current;
-          velocityRef.current *= 0.88;
-        } else if (!isDraggingFaceRef.current) {
-          velocityRef.current = 0;
+      if (!isDraggingFaceRef.current && Math.abs(velocityRef.current) > 0.00005) {
+        targetTurnRef.current += velocityRef.current;
+        velocityRef.current *= 0.935;
+      } else if (!isDraggingFaceRef.current) {
+        velocityRef.current = 0;
+      }
+      const diff = targetTurnRef.current - currentTurnRef.current;
+      if (Math.abs(diff) > 0.00005) {
+        currentTurnRef.current += diff * (isDraggingFaceRef.current ? 0.36 : 0.22);
+        const norm = ((currentTurnRef.current % 1) + 1) % 1;
+        const frameIdx = Math.round(norm * TOTAL) % TOTAL;
+        if (frameIdx !== lastDrawnFrame) {
+          drawFrame(frameIdx);
         }
-        const diff = targetTimeRef.current - currentTimeRef.current;
-        if (Math.abs(diff) > 0.0012) {
-          currentTimeRef.current += diff * 0.2;
-          if (!video.seeking) {
-            let wrapped = currentTimeRef.current % dur;
-            if (wrapped < 0) wrapped += dur;
-            video.currentTime = Math.max(0.01, Math.min(dur - 0.02, wrapped));
-          }
-          const norm = (((currentTimeRef.current / dur) % 1) + 1) % 1;
-          const deg = Math.round(norm * 360) % 360;
-          if (deg !== lastDeg) {
-            lastDeg = deg;
-            setAngleDeg(deg);
-          }
+        const deg = Math.round(norm * 360) % 360;
+        if (deg !== lastDeg) {
+          lastDeg = deg;
+          setAngleDeg(deg);
         }
       }
       animId = requestAnimationFrame(updateRotation);
@@ -91,12 +103,11 @@ export default function HeroSection() {
     animId = requestAnimationFrame(updateRotation);
 
     return () => {
-      video.removeEventListener('loadedmetadata', initVideoFrame);
       cancelAnimationFrame(animId);
     };
   }, []);
 
-  // Drag-only rotation handlers (no hover tilt or unwanted motion)
+  // Drag-only rotation handlers (snappy 1:1 tracking + silky bearing flick)
   const handleFacePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     isDraggingFaceRef.current = true;
     velocityRef.current = 0;
@@ -109,10 +120,9 @@ export default function HeroSection() {
     if (!isDraggingFaceRef.current) return;
     const deltaX = e.clientX - dragStartXRef.current;
     dragStartXRef.current = e.clientX;
-    const dur = faceVideoRef.current?.duration || 10.03;
-    const step = (deltaX / 340) * dur;
-    targetTimeRef.current += step;
-    velocityRef.current = step * 0.72;
+    const step = deltaX / 360;
+    targetTurnRef.current += step;
+    velocityRef.current = velocityRef.current * 0.35 + step * 0.65;
   };
 
   const handleFacePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -207,25 +217,17 @@ export default function HeroSection() {
           >
             <div
               style={{
-                maskImage:
-                  'linear-gradient(to right, transparent 0%, black 11%, black 89%, transparent 100%), linear-gradient(to bottom, transparent 0%, black 4%, black 85%, transparent 100%)',
-                WebkitMaskImage:
-                  'linear-gradient(to right, transparent 0%, black 11%, black 89%, transparent 100%), linear-gradient(to bottom, transparent 0%, black 4%, black 85%, transparent 100%)',
-                maskComposite: 'intersect',
-                WebkitMaskComposite: 'source-in',
+                maskImage: 'linear-gradient(to bottom, black 0%, black 92%, transparent 100%)',
+                WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 92%, transparent 100%)',
               }}
-              className="relative h-[68vh] sm:h-[76vh] lg:h-[82vh] max-h-[840px] w-auto aspect-[9/16] flex items-center justify-center overflow-hidden"
+              className="relative h-[64vh] sm:h-[72vh] lg:h-[76vh] max-h-[780px] w-auto aspect-[9/16] flex items-center justify-center overflow-hidden"
             >
-              <video
-                ref={faceVideoRef}
-                muted
-                playsInline
-                preload="auto"
-                poster={withBasePath('/face_3d_poster.jpg?v=5')}
-                className="w-full h-full object-cover object-[center_14%] select-none pointer-events-none scale-[1.12] contrast-[1.06] saturate-[1.05] brightness-[1.04]"
-              >
-                <source src={withBasePath('/3d_model_me.mp4?v=5')} type="video/mp4" />
-              </video>
+              <canvas
+                ref={faceCanvasRef}
+                width={384}
+                height={682}
+                className="w-full h-full object-contain select-none pointer-events-none"
+              />
             </div>
           </div>
 

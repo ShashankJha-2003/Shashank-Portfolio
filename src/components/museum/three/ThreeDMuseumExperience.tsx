@@ -1499,61 +1499,48 @@ export default function ThreeDMuseumExperience({
     }
     r0.add(faceTurntableGroup);
 
-    // Side-by-side Color (left half) + Zero-Hole Flood-Fill Alpha Matte (right half)
-    // Preserves 100% solid natural hair, skin, and dark leather with zero chroma-key glitches!
-    const faceVideo = document.createElement('video');
-    faceVideo.src = withBasePath('/3d_model_me_alpha.mp4?v=6');
-    faceVideo.crossOrigin = 'anonymous';
-    faceVideo.loop = false;
-    faceVideo.muted = true;
-    faceVideo.playsInline = true;
-    faceVideo.preload = 'auto';
+    // GPU-Resident 96-Angle RGBA WebP Turntable Atlas (4 sheets x 24 angles = 3.75° spacing!)
+    // Zero <video> seeking latency -> locked 60-120 FPS liquid-smooth 360° drag rotation!
+    const TURNTABLE_TOTAL_FRAMES = 96;
+    const texLoader = new THREE.TextureLoader();
+    const sheetLoaded = [false, false, false, false];
+    const sheetTexs: THREE.Texture[] = [0, 1, 2, 3].map((idx) => {
+      const tex = trackTex(
+        texLoader.load(withBasePath(`/face_turntable_${idx}.webp?v=7`), () => {
+          sheetLoaded[idx] = true;
+          if (idx === 0) {
+            faceBustShaderMat.uniforms.uAtlasReady.value = 1.0;
+          }
+        })
+      );
+      tex.minFilter = THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.generateMipmaps = false;
+      tex.wrapS = THREE.ClampToEdgeWrapping;
+      tex.wrapT = THREE.ClampToEdgeWrapping;
+      return tex;
+    });
 
-    const faceVideoTex = trackTex(new THREE.VideoTexture(faceVideo));
-    faceVideoTex.minFilter = THREE.LinearFilter;
-    faceVideoTex.magFilter = THREE.LinearFilter;
-    faceVideoTex.generateMipmaps = false;
-
-    let faceTargetTime = 0.02;
-    let faceCurrentTime = 0.02;
-    let faceVelocity = 0;
-    let faceVideoReady = false;
+    // Normalized rotation state (1.0 = full 360° turn) with silky magnetic-bearing momentum
+    let faceTargetTurn = 0.0;
+    let faceCurrentTurn = 0.0;
+    let faceVelocity = 0.0;
 
     resetFaceModelRef.current = () => {
-      const dur = faceVideo.duration || 10.0;
-      const currentCycles = Math.round(faceCurrentTime / dur);
+      const nearestZero = Math.round(faceCurrentTurn);
       faceVelocity = 0;
-      faceTargetTime = currentCycles * dur + 0.02;
+      faceTargetTurn = nearestZero;
     };
-
-    const handleFaceSeeked = () => {
-      faceVideoReady = true;
-      faceVideoTex.needsUpdate = true;
-    };
-    const initFaceVideoFrame = () => {
-      faceVideo.pause();
-      if (faceVideo.duration) faceVideo.currentTime = 0.02;
-      faceTargetTime = 0.02;
-      faceCurrentTime = 0.02;
-      faceVideoReady = true;
-      faceVideoTex.needsUpdate = true;
-    };
-    faceVideo.addEventListener('seeked', handleFaceSeeked);
-    faceVideo.addEventListener('loadeddata', initFaceVideoFrame, { once: true });
-    faceVideo.addEventListener('canplay', initFaceVideoFrame, { once: true });
-    faceVideo.load();
-
-    const texLoader = new THREE.TextureLoader();
-    const facePosterTex = trackTex(texLoader.load(withBasePath('/face_3d_poster_alpha.jpg?v=6')));
-    facePosterTex.minFilter = THREE.LinearFilter;
-    facePosterTex.magFilter = THREE.LinearFilter;
 
     const faceBustShaderMat = trackMat(
       new THREE.ShaderMaterial({
         uniforms: {
-          uVideoMap: { value: faceVideoTex },
-          uPosterMap: { value: facePosterTex },
-          uUseVideo: { value: 0.0 },
+          uSheet0: { value: sheetTexs[0] },
+          uSheet1: { value: sheetTexs[1] },
+          uSheet2: { value: sheetTexs[2] },
+          uSheet3: { value: sheetTexs[3] },
+          uFrameFloat: { value: 0.0 },
+          uAtlasReady: { value: 0.0 },
           uHoverGlow: { value: 0.0 },
           uDragIntensity: { value: 0.0 },
         },
@@ -1565,44 +1552,61 @@ export default function ThreeDMuseumExperience({
           }
         `,
         fragmentShader: `
-          uniform sampler2D uVideoMap;
-          uniform sampler2D uPosterMap;
-          uniform float uUseVideo;
+          uniform sampler2D uSheet0;
+          uniform sampler2D uSheet1;
+          uniform sampler2D uSheet2;
+          uniform sampler2D uSheet3;
+          uniform float uFrameFloat;
+          uniform float uAtlasReady;
           uniform float uHoverGlow;
           uniform float uDragIntensity;
           varying vec2 vUv;
 
-          vec3 samplePacked(vec2 uv) {
-            return uUseVideo > 0.5 ? texture2D(uVideoMap, uv).rgb : texture2D(uPosterMap, uv).rgb;
+          vec4 sampleTurntableFrame(float frameIdx, vec2 uv) {
+            float sheetIdx = floor(frameIdx / 24.0);
+            float localIdx = frameIdx - sheetIdx * 24.0;
+            float row = floor(localIdx / 8.0);
+            float col = localIdx - row * 8.0;
+
+            // Inset slightly inside each 384x682 cell to prevent any neighbor-cell bleed
+            float cellU = (col + mix(0.004, 0.996, uv.x)) / 8.0;
+            float pixelY = (row + mix(0.997, 0.003, uv.y)) * 682.0;
+            float cellV = 1.0 - (pixelY / 2048.0);
+            vec2 atlasUv = vec2(cellU, cellV);
+
+            if (sheetIdx < 0.5) return texture2D(uSheet0, atlasUv);
+            if (sheetIdx < 1.5) return texture2D(uSheet1, atlasUv);
+            if (sheetIdx < 2.5) return texture2D(uSheet2, atlasUv);
+            return texture2D(uSheet3, atlasUv);
           }
 
           void main() {
-            // Left half = crisp native 720x1280 original RGB; right half = pixel-perfect alpha matte
-            vec2 colorUv = vec2(0.001 + vUv.x * 0.497, vUv.y);
-            vec2 alphaUv = vec2(0.502 + vUv.x * 0.496, vUv.y);
+            if (uAtlasReady < 0.5) discard;
 
-            float matte = samplePacked(alphaUv).g;
+            float wrapped = mod(uFrameFloat, 96.0);
+            if (wrapped < 0.0) wrapped += 96.0;
+            float idxA = floor(wrapped);
+            float idxB = mod(idxA + 1.0, 96.0);
+            float blend = fract(wrapped);
+
+            vec4 sa = sampleTurntableFrame(idxA, vUv);
+            vec4 sb = sampleTurntableFrame(idxB, vUv);
+
+            // Premultiplied-alpha safe sub-frame interpolation for silky 120fps rotation
+            float matte = mix(sa.a, sb.a, blend);
             float bottomFeather = smoothstep(0.0, 0.055, vUv.y);
             float sideFeather = smoothstep(0.0, 0.02, vUv.x) * (1.0 - smoothstep(0.98, 1.0, vUv.x));
             float alpha = matte * bottomFeather * sideFeather;
 
             if (alpha < 0.03) discard;
 
-            // Gentle studio micro-clarity (preserves natural original skin & rich leather without ringing halos!)
-            vec2 texel = vec2(0.5 / 720.0, 1.0 / 1280.0);
-            vec3 cCenter = samplePacked(colorUv);
-            vec3 cBlur = (
-              samplePacked(colorUv + vec2(texel.x, 0.0)) +
-              samplePacked(colorUv - vec2(texel.x, 0.0)) +
-              samplePacked(colorUv + vec2(0.0, texel.y)) +
-              samplePacked(colorUv - vec2(0.0, texel.y))
-            ) * 0.25;
-            vec3 naturalSrgb = clamp(cCenter + (cCenter - cBlur) * 0.14, 0.0, 1.0);
+            vec3 premulRgb = mix(sa.rgb * sa.a, sb.rgb * sb.a, blend);
+            vec3 naturalSrgb = matte > 0.002 ? clamp(premulRgb / matte, 0.0, 1.0) : sa.rgb;
 
             // Convert sRGB -> Linear accurately for Three.js ACES Filmic OutputPass
             vec3 linearCol = pow(max(naturalSrgb, vec3(0.0)), vec3(2.2));
 
-            // Whisper-subtle champagne rim response ONLY when hovered or actively dragged
+            // Whisper-subtle champagne rim response when hovered or actively spinning
             float edgeGlow = (1.0 - smoothstep(0.25, 0.92, matte)) * (uHoverGlow * 0.08 + uDragIntensity * 0.12);
             linearCol += vec3(0.94, 0.85, 0.72) * edgeGlow;
 
@@ -3267,10 +3271,9 @@ export default function ThreeDMuseumExperience({
         dragDistance += Math.abs(dx) + Math.abs(dy);
         dragStartX = e.clientX;
         dragStartY = e.clientY;
-        const dur = faceVideo.duration || 10.03;
-        const step = (dx / 340) * dur;
-        faceTargetTime += step;
-        faceVelocity = step * 0.72;
+        const step = dx / 360;
+        faceTargetTurn += step;
+        faceVelocity = faceVelocity * 0.35 + step * 0.65;
         renderer.domElement.style.cursor = 'grabbing';
         return;
       }
@@ -3342,10 +3345,9 @@ export default function ThreeDMuseumExperience({
         const dx = t.clientX - touchLastX;
         touchLastX = t.clientX;
         touchLastY = t.clientY;
-        const dur = faceVideo.duration || 10.03;
-        const step = (dx / 240) * dur;
-        faceTargetTime += step;
-        faceVelocity = step * 0.65;
+        const step = dx / 250;
+        faceTargetTurn += step;
+        faceVelocity = faceVelocity * 0.35 + step * 0.65;
         return;
       }
       stopAutoTour();
@@ -3408,37 +3410,35 @@ export default function ThreeDMuseumExperience({
         }
       }
 
-      // 0. Smooth Manual 360° Drag-to-Rotate + Bearing Momentum for Centerpiece 3D Model
-      if (faceVideoReady && faceVideo.readyState >= 2) faceBustShaderMat.uniforms.uUseVideo.value = 1.0;
-      if (!isDraggingFaceModel && !isTouchRotatingFace && Math.abs(faceVelocity) > 0.0004) {
-        faceTargetTime += faceVelocity;
-        faceVelocity *= 0.88;
+      // 0. Zero-Latency GPU-Resident 96-Angle Turntable Rotation + Silky Flick Momentum
+      if (!isDraggingFaceModel && !isTouchRotatingFace && Math.abs(faceVelocity) > 0.00005) {
+        faceTargetTurn += faceVelocity;
+        faceVelocity *= 0.935;
       } else if (!isDraggingFaceModel && !isTouchRotatingFace) {
         faceVelocity = 0;
       }
-      if (faceVideo.readyState >= 1 && faceVideo.duration) {
-        const dur = faceVideo.duration;
-        const diff = faceTargetTime - faceCurrentTime;
-        if (Math.abs(diff) > 0.0012) {
-          faceCurrentTime += diff * 0.2;
-          if (!faceVideo.seeking) {
-            let wrapped = faceCurrentTime % dur;
-            if (wrapped < 0) wrapped += dur;
-            faceVideo.currentTime = Math.max(0.01, Math.min(dur - 0.02, wrapped));
-            faceVideoTex.needsUpdate = true;
-          }
-          const normAngle = (((faceCurrentTime / dur) % 1) + 1) % 1;
-          faceTurntableGroup.rotation.y = -normAngle * Math.PI * 2;
-          const deg = Math.round(normAngle * 360) % 360;
-          if (deg !== lastFaceAngleDeg) {
-            lastFaceAngleDeg = deg;
-            setFaceAngleDeg(deg);
-          }
+      const turnDiff = faceTargetTurn - faceCurrentTurn;
+      if (Math.abs(turnDiff) > 0.00005) {
+        const lerpRate = isDraggingFaceModel || isTouchRotatingFace ? 0.36 : 0.22;
+        faceCurrentTurn += turnDiff * lerpRate;
+        const normAngle = ((faceCurrentTurn % 1) + 1) % 1;
+        const allSheetsLoaded = sheetLoaded[0] && sheetLoaded[1] && sheetLoaded[2] && sheetLoaded[3];
+        if (allSheetsLoaded) {
+          faceBustShaderMat.uniforms.uFrameFloat.value = normAngle * TURNTABLE_TOTAL_FRAMES;
+        } else if (sheetLoaded[0]) {
+          // Allow instant preview across sheet 0 while sheets 1-3 finish loading
+          faceBustShaderMat.uniforms.uFrameFloat.value = Math.min(23, normAngle * TURNTABLE_TOTAL_FRAMES);
         }
-        const dragGlowTarget = isDraggingFaceModel || isTouchRotatingFace || Math.abs(diff) > 0.02 ? 1.0 : 0.0;
-        faceBustShaderMat.uniforms.uDragIntensity.value +=
-          (dragGlowTarget - faceBustShaderMat.uniforms.uDragIntensity.value) * 0.14;
+        faceTurntableGroup.rotation.y = -normAngle * Math.PI * 2;
+        const deg = Math.round(normAngle * 360) % 360;
+        if (deg !== lastFaceAngleDeg) {
+          lastFaceAngleDeg = deg;
+          setFaceAngleDeg(deg);
+        }
       }
+      const dragGlowTarget = isDraggingFaceModel || isTouchRotatingFace || Math.abs(turnDiff) > 0.003 ? 1.0 : 0.0;
+      faceBustShaderMat.uniforms.uDragIntensity.value +=
+        (dragGlowTarget - faceBustShaderMat.uniforms.uDragIntensity.value) * 0.14;
       const hoverTarget = isDraggingFaceModel || currentHoveredId === 'centerpiece-3d-face' ? 1.0 : 0.0;
       faceBustShaderMat.uniforms.uHoverGlow.value += (hoverTarget - faceBustShaderMat.uniforms.uHoverGlow.value) * 0.12;
 
@@ -3448,7 +3448,7 @@ export default function ThreeDMuseumExperience({
       emblemRing1.rotation.y = -elapsed * 0.42;
       emblemRing1.rotation.x = elapsed * 0.28;
       emblemRing2.rotation.z = elapsed * 0.32;
-      emblemGroup.position.y = 6.25 + Math.sin(elapsed * 1.15) * 0.08;
+      emblemGroup.position.y = 7.55 + Math.sin(elapsed * 1.15) * 0.08;
 
       vertexPhoneGroup.rotation.y = elapsed * 0.5;
       vertexPhoneGroup.position.y = 2.8 + Math.sin(elapsed * 1.35) * 0.11;
@@ -3729,11 +3729,6 @@ export default function ThreeDMuseumExperience({
       renderer.domElement.removeEventListener('touchstart', handleTouchStart);
       renderer.domElement.removeEventListener('touchmove', handleTouchMove);
 
-      faceVideo.removeEventListener('seeked', handleFaceSeeked);
-      faceVideo.removeEventListener('loadeddata', initFaceVideoFrame);
-      faceVideo.removeEventListener('canplay', initFaceVideoFrame);
-      faceVideo.pause();
-      faceVideo.src = '';
       floorReflector.dispose();
       envRT.dispose();
       composer.dispose();
