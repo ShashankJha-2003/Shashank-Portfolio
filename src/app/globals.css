@@ -1,0 +1,212 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-serif: var(--font-serif), Georgia, Cambria, "Times New Roman", serif;
+}
+
+:root {
+  --bg-primary: #0f1013;
+  --bg-secondary: #16181d;
+  --bg-glass: rgba(22, 25, 31, 0.90);
+  --border-glass: rgba(230, 222, 209, 0.12);
+  --accent-beige: #d6c7b2;
+  --accent-beige-light: #ece3d4;
+  --accent-beige-dark: #b8a68d;
+  --text-primary: #f5f0e8;
+  --text-secondary: #d5cec2;
+  --text-muted: #8e877c;
+}
+
+html {
+  scroll-behavior: smooth;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  overflow-x: hidden;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f1013;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(214, 199, 178, 0.22);
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #d6c7b2;
+}
+
+/* Selection Color */
+::selection {
+  background: rgba(214, 199, 178, 0.35);
+  color: #ffffff;
+}
+
+/* Glassmorphism utility with rich charcoal dark grey fills and warm beige borders */
+.glass-panel {
+  background: rgba(22, 25, 32, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(230, 222, 209, 0.12);
+  box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.85);
+}
+
+.glass-panel-glow {
+  background: rgba(24, 28, 36, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(214, 199, 178, 0.35);
+  box-shadow: 0 0 35px -10px rgba(214, 199, 178, 0.20);
+}
+
+.glass-card {
+  background: rgba(22, 25, 32, 0.90);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(230, 222, 209, 0.10);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card:hover {
+  border-color: rgba(214, 199, 178, 0.45);
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.8), 0 0 25px -5px rgba(214, 199, 178, 0.15);
+}
+
+/* Shimmer and Glow text */
+.text-glow-beige {
+  text-shadow: 0 0 24px rgba(214, 199, 178, 0.55);
+}
+
+.text-glow-sand {
+  text-shadow: 0 0 20px rgba(236, 227, 212, 0.35);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #f5f0e8 20%, #d6c7b2 60%, #a89a84 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gradient-text-vibrant {
+  background: linear-gradient(135deg, #ffffff 0%, #ece3d4 40%, #d6c7b2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Signature SVG Drawing Animation */
+.signature-path {
+  stroke-dasharray: 1200;
+  stroke-dashoffset: 1200;
+  animation: drawSignature 2.4s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+
+@keyframes drawSignature {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Animated gradient border */
+@keyframes spinBorder {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.animated-border-wrap {
+  position: relative;
+  overflow: hidden;
+}
+
+.animated-border-wrap::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(transparent, #d6c7b2, transparent 40%);
+  animation: spinBorder 4s linear infinite;
+  z-index: 0;
+}
+
+/* Animated Morphing Blob Keyframes */
+@keyframes morphBlob {
+  0% {
+    border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%;
+    transform: rotate(0deg);
+  }
+  25% {
+    border-radius: 70% 30% 46% 54% / 30% 29% 71% 70%;
+    transform: rotate(90deg);
+  }
+  50% {
+    border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
+    transform: rotate(180deg);
+  }
+  75% {
+    border-radius: 65% 35% 38% 62% / 65% 48% 52% 35%;
+    transform: rotate(270deg);
+  }
+  100% {
+    border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%;
+    transform: rotate(360deg);
+  }
+}
+
+.animate-morph-blob {
+  animation: morphBlob 8s ease-in-out infinite;
+}
+
+.animate-morph-blob-fast {
+  animation: morphBlob 5s ease-in-out infinite alternate;
+}
+
+/* =====================================================================
+   THE DIGITAL MUSEUM — ARCHITECTURAL GALLERY UTILITIES
+   ===================================================================== */
+.museum-plaque {
+  background: linear-gradient(160deg, rgba(24, 27, 34, 0.95) 0%, rgba(15, 16, 19, 0.98) 100%);
+  border: 1px solid rgba(214, 199, 178, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(236, 227, 212, 0.12),
+    0 20px 50px -15px rgba(0, 0, 0, 0.85);
+}
+
+.museum-spotlight {
+  background: radial-gradient(
+    ellipse 60% 45% at 50% 0%,
+    rgba(214, 199, 178, 0.14) 0%,
+    rgba(214, 199, 178, 0.04) 45%,
+    transparent 80%
+  );
+}
+
+.museum-stone-wall {
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(214, 199, 178, 0.09), transparent 62%),
+    linear-gradient(180deg, rgba(22, 24, 30, 0.72) 0%, rgba(15, 16, 19, 0.96) 100%);
+}
+
+.museum-arch-frame {
+  border-top-left-radius: 9999px;
+  border-top-right-radius: 9999px;
+}
+
