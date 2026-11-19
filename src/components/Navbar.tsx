@@ -100,7 +100,7 @@ export default function Navbar({
     <header className="fixed top-0 left-0 w-full z-40 px-4 sm:px-8 pt-4 pb-2 transition-all duration-300">
       <div className="max-w-7xl mx-auto">
         <nav
-          className={`flex items-center justify-between px-5 py-3 rounded-full transition-all duration-300 border ${scrolled
+          className={`flex items-center justify-between gap-2 px-4 py-2 rounded-full transition-all duration-300 border ${scrolled
               ? 'bg-[#14161c]/90 backdrop-blur-xl border-[#d6c7b2]/15 shadow-[0_10px_35px_-10px_rgba(0,0,0,0.85)]'
               : 'bg-[#14161c]/50 backdrop-blur-md border-[#d6c7b2]/10'
             }`}
@@ -112,19 +112,19 @@ export default function Navbar({
               e.preventDefault();
               handleLinkClick('#hero', 'hero');
             }}
-            className="flex items-center gap-2.5 group cursor-pointer"
+            className="flex items-center gap-2.5 group cursor-pointer shrink-0"
           >
-            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#d6c7b2] via-[#ece3d4] to-[#8e877c] p-[1.5px] transition-transform duration-300 group-hover:scale-105 shadow-[0_0_15px_rgba(214,199,178,0.25)]">
-              <div className="w-full h-full rounded-full bg-[#0f1013] flex items-center justify-center font-mono font-bold text-xs tracking-tight text-[#f5f0e8] group-hover:text-[#d6c7b2] transition-colors">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#d6c7b2] via-[#ece3d4] to-[#8e877c] p-[1.5px] transition-transform duration-300 group-hover:scale-105 shadow-[0_0_15px_rgba(214,199,178,0.25)] shrink-0">
+              <div className="w-full h-full rounded-full bg-[#0f1013] flex items-center justify-center font-mono font-bold text-[11px] tracking-tight text-[#f5f0e8] group-hover:text-[#d6c7b2] transition-colors">
                 {data.personal.name.split(' ').map(n => n[0]).join('') || 'SJ'}
               </div>
             </div>
-            <div className="hidden sm:flex flex-col text-left">
-              <span className="text-sm font-bold tracking-tight text-[#f5f0e8] group-hover:text-[#d6c7b2] transition-colors">
+            <div className="hidden sm:flex flex-col text-left min-w-0">
+              <span className="text-xs xl:text-sm font-bold tracking-tight text-[#f5f0e8] group-hover:text-[#d6c7b2] transition-colors whitespace-nowrap">
                 {data.personal.name}
               </span>
-              <span className="text-[10px] font-mono text-[#d6c7b2] tracking-wider uppercase">
-                {data.personal.title}
+              <span className="text-[9px] font-mono text-[#d6c7b2] tracking-wider uppercase whitespace-nowrap truncate max-w-[135px] xl:max-w-[175px]">
+                Digital Museum • 3D
               </span>
             </div>
           </a>
@@ -161,7 +161,7 @@ export default function Navbar({
           </div>
 
           {/* Right Action Buttons */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             {/* Switch between Real 3D Walkable Museum & Scroll Gallery */}
             {onToggleMuseumMode && (
               <button
@@ -175,7 +175,7 @@ export default function Navbar({
                     ? 'Switch to Classic Vertical Scroll Gallery'
                     : 'Enter Full 3D Three.js Walkable Museum'
                 }
-                className="hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[11px] font-mono border border-[#d6c7b2]/45 bg-[#d6c7b2]/15 text-[#d6c7b2] hover:text-[#0f1013] hover:bg-[#d6c7b2] transition-all cursor-pointer font-semibold"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-[#d6c7b2]/45 bg-[#d6c7b2]/15 text-[#d6c7b2] hover:text-[#0f1013] hover:bg-[#d6c7b2] transition-all cursor-pointer font-semibold whitespace-nowrap shrink-0"
               >
                 {museumMode === '3d' ? (
                   <>

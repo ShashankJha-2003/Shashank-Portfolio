@@ -1134,7 +1134,7 @@ export default function ThreeDMuseumExperience({
           new THREE.MeshBasicMaterial({
             color: accentHex,
             transparent: true,
-            opacity: 0.036,
+            opacity: 0.014,
             depthWrite: false,
             blending: THREE.AdditiveBlending,
             side: THREE.DoubleSide,
@@ -1162,6 +1162,7 @@ export default function ThreeDMuseumExperience({
         poolTexture?: THREE.CanvasTexture;
         withGlassVitrine?: boolean;
         vitrineHeight?: number;
+        withSpotlightCone?: boolean;
       }
     ) => {
       const r = params.radius || 1.45;
@@ -1223,21 +1224,23 @@ export default function ThreeDMuseumExperience({
         group.add(vitrineTopRing);
       }
 
-      const beam = new THREE.Mesh(
-        trackGeo(new THREE.ConeGeometry(r * 1.9, 7.3, 28, 1, true)),
-        trackMat(
-          new THREE.MeshBasicMaterial({
-            color: accentHex,
-            transparent: true,
-            opacity: 0.042,
-            depthWrite: false,
-            blending: THREE.AdditiveBlending,
-            side: THREE.DoubleSide,
-          })
-        )
-      );
-      beam.position.y = 4.7;
-      group.add(beam);
+      if (params.withSpotlightCone !== false) {
+        const beam = new THREE.Mesh(
+          trackGeo(new THREE.ConeGeometry(r * 1.9, 7.3, 28, 1, true)),
+          trackMat(
+            new THREE.MeshBasicMaterial({
+              color: accentHex,
+              transparent: true,
+              opacity: 0.032,
+              depthWrite: false,
+              blending: THREE.AdditiveBlending,
+              side: THREE.DoubleSide,
+            })
+          )
+        );
+        beam.position.y = 4.7;
+        group.add(beam);
+      }
 
       parent.add(group);
       return group;
@@ -1402,10 +1405,11 @@ export default function ThreeDMuseumExperience({
     createLuxuryPedestal(r0, {
       x: 0,
       z: cpLocalZ,
-      radius: 1.72,
+      radius: 1.65,
       height: 0.54,
       accentHex: 0xd6c7b2,
       poolTexture: goldPoolTex,
+      withSpotlightCone: false,
     });
 
     const centerpieceKeyLight = new THREE.PointLight(0xfff1dc, 4.2, 18, 1.4);
@@ -1476,7 +1480,10 @@ export default function ThreeDMuseumExperience({
     const turntableOuterRing = new THREE.Mesh(trackGeo(new THREE.TorusGeometry(1.66, 0.036, 18, 84)), brushedBrassMat);
     turntableOuterRing.rotation.x = Math.PI / 2;
     faceTurntableGroup.add(turntableOuterRing);
-    const turntableInnerHalo = new THREE.Mesh(trackGeo(new THREE.TorusGeometry(1.42, 0.02, 14, 72)), warmEmissiveMat);
+    const turntableHaloMat = trackMat(
+      new THREE.MeshStandardMaterial({ color: 0xe6d6bc, emissive: 0xd6c09c, emissiveIntensity: 0.65, roughness: 0.25 })
+    );
+    const turntableInnerHalo = new THREE.Mesh(trackGeo(new THREE.TorusGeometry(1.36, 0.018, 14, 72)), turntableHaloMat);
     turntableInnerHalo.rotation.x = Math.PI / 2;
     turntableInnerHalo.position.y = 0.02;
     faceTurntableGroup.add(turntableInnerHalo);
@@ -1485,15 +1492,17 @@ export default function ThreeDMuseumExperience({
     for (let t = 0; t < 36; t++) {
       const angle = (t / 36) * Math.PI * 2;
       const isCardinal = t % 9 === 0;
-      const tick = new THREE.Mesh(isCardinal ? majorTickGeo : tickGeo, isCardinal ? warmEmissiveMat : brushedBrassMat);
-      tick.position.set(Math.sin(angle) * 1.54, 0.032, Math.cos(angle) * 1.54);
+      const tick = new THREE.Mesh(isCardinal ? majorTickGeo : tickGeo, isCardinal ? turntableHaloMat : brushedBrassMat);
+      tick.position.set(Math.sin(angle) * 1.48, 0.032, Math.cos(angle) * 1.48);
       tick.rotation.y = angle;
       faceTurntableGroup.add(tick);
     }
     r0.add(faceTurntableGroup);
 
+    // Side-by-side Color (left half) + Zero-Hole Flood-Fill Alpha Matte (right half)
+    // Preserves 100% solid natural hair, skin, and dark leather with zero chroma-key glitches!
     const faceVideo = document.createElement('video');
-    faceVideo.src = withBasePath('/3d_model_me.mp4?v=5');
+    faceVideo.src = withBasePath('/3d_model_me_alpha.mp4?v=6');
     faceVideo.crossOrigin = 'anonymous';
     faceVideo.loop = false;
     faceVideo.muted = true;
@@ -1511,7 +1520,7 @@ export default function ThreeDMuseumExperience({
     let faceVideoReady = false;
 
     resetFaceModelRef.current = () => {
-      const dur = faceVideo.duration || 10.03;
+      const dur = faceVideo.duration || 10.0;
       const currentCycles = Math.round(faceCurrentTime / dur);
       faceVelocity = 0;
       faceTargetTime = currentCycles * dur + 0.02;
@@ -1535,7 +1544,7 @@ export default function ThreeDMuseumExperience({
     faceVideo.load();
 
     const texLoader = new THREE.TextureLoader();
-    const facePosterTex = trackTex(texLoader.load(withBasePath('/face_3d_poster.jpg?v=5')));
+    const facePosterTex = trackTex(texLoader.load(withBasePath('/face_3d_poster_alpha.jpg?v=6')));
     facePosterTex.minFilter = THREE.LinearFilter;
     facePosterTex.magFilter = THREE.LinearFilter;
 
@@ -1562,74 +1571,75 @@ export default function ThreeDMuseumExperience({
           uniform float uHoverGlow;
           uniform float uDragIntensity;
           varying vec2 vUv;
-          vec3 samplePortrait(vec2 uv) {
+
+          vec3 samplePacked(vec2 uv) {
             return uUseVideo > 0.5 ? texture2D(uVideoMap, uv).rgb : texture2D(uPosterMap, uv).rgb;
           }
+
           void main() {
-            vec2 texel = vec2(1.0 / 720.0, 1.0 / 1280.0);
-            vec3 cCenter = samplePortrait(vUv);
+            // Left half = crisp native 720x1280 original RGB; right half = pixel-perfect alpha matte
+            vec2 colorUv = vec2(0.001 + vUv.x * 0.497, vUv.y);
+            vec2 alphaUv = vec2(0.502 + vUv.x * 0.496, vUv.y);
+
+            float matte = samplePacked(alphaUv).g;
+            float bottomFeather = smoothstep(0.0, 0.055, vUv.y);
+            float sideFeather = smoothstep(0.0, 0.02, vUv.x) * (1.0 - smoothstep(0.98, 1.0, vUv.x));
+            float alpha = matte * bottomFeather * sideFeather;
+
+            if (alpha < 0.03) discard;
+
+            // Gentle studio micro-clarity (preserves natural original skin & rich leather without ringing halos!)
+            vec2 texel = vec2(0.5 / 720.0, 1.0 / 1280.0);
+            vec3 cCenter = samplePacked(colorUv);
             vec3 cBlur = (
-              samplePortrait(vUv + vec2(texel.x, 0.0)) +
-              samplePortrait(vUv - vec2(texel.x, 0.0)) +
-              samplePortrait(vUv + vec2(0.0, texel.y)) +
-              samplePortrait(vUv - vec2(0.0, texel.y))
+              samplePacked(colorUv + vec2(texel.x, 0.0)) +
+              samplePacked(colorUv - vec2(texel.x, 0.0)) +
+              samplePacked(colorUv + vec2(0.0, texel.y)) +
+              samplePacked(colorUv - vec2(0.0, texel.y))
             ) * 0.25;
-            vec3 sharp = clamp(cCenter + (cCenter - cBlur) * 0.42, 0.0, 1.0);
-            vec3 bgCol = vec3(14.5 / 255.0, 15.5 / 255.0, 18.5 / 255.0);
-            float bgDist = length(cCenter - bgCol);
-            float isCoolSlate = smoothstep(-0.003, 0.011, cCenter.b - cCenter.r);
-            float chromaCut = mix(1.0, smoothstep(0.015, 0.062, bgDist), isCoolSlate);
-            vec2 headNorm = (vUv - vec2(0.5, 0.65)) / vec2(0.24, 0.22);
-            float inHead = 1.0 - smoothstep(0.76, 1.04, length(headNorm));
-            float inTorso = (1.0 - smoothstep(0.24, 0.36, abs(vUv.x - 0.5))) * (1.0 - smoothstep(0.26, 0.40, vUv.y));
-            float portraitAlpha = max(chromaCut, max(inHead, inTorso));
-            float bottomFade = smoothstep(0.0, 0.15, vUv.y);
-            float topFade = 1.0 - smoothstep(0.93, 0.99, vUv.y);
-            float sideFade = smoothstep(0.0, 0.055, vUv.x) * (1.0 - smoothstep(0.945, 1.0, vUv.x));
-            float alpha = portraitAlpha * bottomFade * topFade * sideFade;
-            if (alpha < 0.015) discard;
-            float edgeMask = 1.0 - smoothstep(0.15, 0.88, alpha);
-            vec3 cleanSrgb = mix(sharp, max(sharp - bgCol * 0.32, vec3(0.0)) * 1.08, edgeMask * isCoolSlate);
-            cleanSrgb = clamp((cleanSrgb - 0.5) * 1.06 + 0.5, 0.0, 1.0);
-            float luma = dot(cleanSrgb, vec3(0.299, 0.587, 0.114));
-            cleanSrgb = clamp(mix(vec3(luma), cleanSrgb, 1.07), 0.0, 1.0);
-            vec3 linearCol = pow(max(cleanSrgb, vec3(0.0)), vec3(2.2));
-            float radial = length((vUv - vec2(0.5, 0.54)) * vec2(1.45, 0.95));
-            float rim = smoothstep(0.42, 0.92, radial) * (1.0 - smoothstep(0.92, 1.15, radial));
-            linearCol += vec3(0.92, 0.83, 0.70) * rim * (0.045 + uHoverGlow * 0.065 + uDragIntensity * 0.08);
-            linearCol *= 1.08;
+            vec3 naturalSrgb = clamp(cCenter + (cCenter - cBlur) * 0.14, 0.0, 1.0);
+
+            // Convert sRGB -> Linear accurately for Three.js ACES Filmic OutputPass
+            vec3 linearCol = pow(max(naturalSrgb, vec3(0.0)), vec3(2.2));
+
+            // Whisper-subtle champagne rim response ONLY when hovered or actively dragged
+            float edgeGlow = (1.0 - smoothstep(0.25, 0.92, matte)) * (uHoverGlow * 0.08 + uDragIntensity * 0.12);
+            linearCol += vec3(0.94, 0.85, 0.72) * edgeGlow;
+
             gl_FragColor = vec4(linearCol, alpha);
             #include <tonemapping_fragment>
             #include <colorspace_fragment>
           }
         `,
         transparent: true,
-        depthWrite: false,
+        depthWrite: true,
         side: THREE.DoubleSide,
       })
     );
 
-    const bustArcRadius = 3.8;
-    const bustArcGeo = trackGeo(new THREE.CylinderGeometry(bustArcRadius, bustArcRadius, 5.8, 48, 1, true, -0.43, 0.86));
+    // Gentle sculptural relief matching exact 9:16 portrait aspect (width 2.70 x height 4.80)
+    // Framed cleanly above the brass turntable with full head clearance below the top navbar!
+    const bustArcRadius = 5.4;
+    const bustArcGeo = trackGeo(new THREE.CylinderGeometry(bustArcRadius, bustArcRadius, 4.8, 48, 1, true, -0.25, 0.5));
     bustArcGeo.translate(0, 0, -bustArcRadius);
     const faceBustMesh = new THREE.Mesh(bustArcGeo, faceBustShaderMat);
-    faceBustMesh.position.set(0, 3.1, cpLocalZ);
-    faceBustMesh.renderOrder = 2;
+    faceBustMesh.position.set(0, 2.94, cpLocalZ);
+    faceBustMesh.renderOrder = 3;
     r0.add(faceBustMesh);
 
     const faceModelHitMesh = new THREE.Mesh(
-      trackGeo(new THREE.CylinderGeometry(1.95, 1.95, 5.95, 24)),
+      trackGeo(new THREE.CylinderGeometry(1.65, 1.65, 4.9, 24)),
       trackMat(new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }))
     );
-    faceModelHitMesh.position.set(0, 3.1, cpLocalZ);
+    faceModelHitMesh.position.set(0, 2.94, cpLocalZ);
     registerInteractive(faceModelHitMesh, 'centerpiece-3d-face');
     const faceHitTargets: THREE.Object3D[] = [faceModelHitMesh];
     r0.add(faceModelHitMesh);
 
-    // Overhead Iridescent Crystal Prism Emblem Chandelier (ART FX 1!)
+    // Overhead Iridescent Crystal Prism Emblem Chandelier (elevated high near ceiling so it never overlaps the bust!)
     const emblemGroup = new THREE.Group();
-    emblemGroup.position.set(0, 6.25, -23.8);
-    emblemGroup.scale.setScalar(0.65);
+    emblemGroup.position.set(0, 7.55, -22.5);
+    emblemGroup.scale.setScalar(0.48);
     const emblemCore = new THREE.Mesh(trackGeo(new THREE.OctahedronGeometry(0.66, 0)), iridescentCrystalMat);
     emblemGroup.add(emblemCore);
     const emblemRing1 = new THREE.Mesh(trackGeo(new THREE.TorusGeometry(1.16, 0.032, 18, 72)), brushedBrassMat);
@@ -1645,7 +1655,7 @@ export default function ThreeDMuseumExperience({
         code: 'ROOM 00 // THE DIGITAL MUSEUM',
         title: 'THE DIGITAL MUSEUM',
         subtitle: 'An Exhibition of Ideas, Experiments & Creations',
-        body: 'Founded by Shashank Jha — Drag the 3D bust to rotate 360°, explore White-Wall Projects with Live Demos & turn through 8 distinct galleries.',
+        body: 'Founded by Shashank Jha — Drag the 3D bust to rotate 360°, explore White-Wall Projects with Live Demos & turn through 10 distinct galleries.',
         centered: true,
         accent: '#d6c7b2',
       })
@@ -1662,9 +1672,9 @@ export default function ThreeDMuseumExperience({
 
     const entranceGuideTex = trackTex(
       createExhibitPanelTexture({
-        code: 'VISITOR GUIDE // 8 GALLERIES',
+        code: 'VISITOR GUIDE // 10 GALLERIES',
         title: 'EXPLORE THE WINGS',
-        subtitle: 'White-Wall Projects • Live Demos • Hobbies Atelier',
+        subtitle: 'White-Wall Projects • Social Lounge • Floating UI Showroom',
         body: 'Every gallery wing opens via an illuminated 90° corner rotunda with distinct lighting, art shaders, and interactive demos.',
         bullets: [
           'Room 02: Bright White-Wall Projects Hall + Live Demos & GitHub',
